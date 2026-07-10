@@ -1,44 +1,37 @@
-"""Phase 2 quality-control gate: does buy-and-hold reproduce the asset return?
+"""Accounting gate, updated for Phase 3's next-bar execution.
 
-We run buy-and-hold through the engine, then compare the engine's OWN final
-account value (from its mark-to-market equity curve) against a value we compute
-by hand. If the engine's cash + position accounting is honest, they match to
-floating-point precision. This tests the bookkeeping, not just the algebra.
+Uses ZERO-COST execution so this stays a pure bookkeeping test. With next-bar
+execution the entry fills on bar index 1 (the bar AFTER the signal), so the
+hand-computed expectation uses prices.iloc[1] as the entry price.
 """
 from engine.data_handler import PairDataHandler
 from engine.portfolio import Portfolio
-from engine.execution import SimulatedExecution
+from engine.execution import SimulatedExecution, NoCommission, NoSlippage
 from engine.backtest import Backtest
 from strategies.buy_and_hold import BuyAndHold
 
 SYMBOL = "KO"
 
-data = PairDataHandler(SYMBOL, "PEP")   # PEP just rides along; we only trade KO
+data = PairDataHandler(SYMBOL, "PEP")
 strategy = BuyAndHold(SYMBOL)
 portfolio = Portfolio(data, initial_capital=100_000, order_size=100)
-execution = SimulatedExecution()
+execution = SimulatedExecution(NoCommission(), NoSlippage())   # frictionless on purpose
 
 bt = Backtest(data, strategy, portfolio, execution)
 bt.run()
 
-# --- Ground-truth inputs from the raw price series ---
 shares = portfolio.order_size
 initial = portfolio.initial_capital
-entry_price = data.prices[SYMBOL].iloc[0]     # close on the first bar (our entry)
-final_price = data.prices[SYMBOL].iloc[-1]    # close on the last bar
+entry_price = data.prices[SYMBOL].iloc[1]     # next-bar fill: signal bar 0, fill bar 1
+final_price = data.prices[SYMBOL].iloc[-1]
 
-# --- Engine's own number vs. hand-computed expectation ---
-engine_final = portfolio.equity_curve[-1][1]                    # what the engine says
-expected_final = initial + shares * (final_price - entry_price) # what it SHOULD be
-
-# --- The conceptual point: the position's return == the asset's price return ---
-asset_return = final_price / entry_price - 1
+engine_final = portfolio.equity_curve[-1][1]
+expected_final = initial + shares * (final_price - entry_price)
 
 print(f"entry price        : {entry_price:.4f}")
 print(f"final price        : {final_price:.4f}")
 print(f"engine final value : {engine_final:,.2f}")
 print(f"expected final val : {expected_final:,.2f}")
 print(f"difference         : {abs(engine_final - expected_final):.2e}")
-print(f"KO asset return    : {asset_return:.4%}")
 print()
 print("BOOKKEEPING:", "PASS" if abs(engine_final - expected_final) < 1e-6 else "FAIL")
