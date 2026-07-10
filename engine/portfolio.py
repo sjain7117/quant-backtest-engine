@@ -1,9 +1,4 @@
-"""Portfolio: the accountant. Converts signals into orders and applies fills.
-
-Two responsibilities:
-  1. on_signal -> decide the order needed to reach the target position
-  2. on_fill   -> update positions and cash once an order executes
-"""
+"""Portfolio: converts signals into orders and applies fills."""
 from collections import defaultdict
 from engine.events import OrderEvent
 
@@ -13,37 +8,32 @@ class Portfolio:
         self.data = data
         self.initial_capital = initial_capital
         self.cash = initial_capital
-        self.order_size = order_size            # fixed share count for now
-        self.positions = defaultdict(int)       # symbol -> signed shares held
-        self.equity_curve = []                  # (timestamp, total_value) per bar
+        self.order_size = order_size
+        self.positions = defaultdict(int)
+        self.equity_curve = []
 
     def on_signal(self, event, data, events):
-        """Translate a desired direction into a SIGNED order quantity.
-
-        We compute the order as (target position - current position). This
-        'delta' approach means we never accidentally stack a second position on
-        top of an existing one -- we only ever trade the difference needed.
-        """
         current = self.positions[event.symbol]
-        if event.direction == "LONG":
+        # Pairs strategies set target_quantity explicitly (each leg sized by the
+        # hedge ratio). Simple strategies leave it None -> direction + order_size.
+        if event.target_quantity is not None:
+            target = event.target_quantity
+        elif event.direction == "LONG":
             target = self.order_size
         elif event.direction == "SHORT":
             target = -self.order_size
-        else:  # "EXIT" -> flat
+        else:
             target = 0
-
-        quantity = target - current
+        quantity = target - current           # trade only the delta to the target
         if quantity != 0:
             events.append(OrderEvent(event.timestamp, event.symbol, quantity))
 
     def on_fill(self, event):
-        """Apply an executed trade: adjust shares, pay cash, pay commission."""
         self.positions[event.symbol] += event.quantity
-        self.cash -= event.quantity * event.fill_price   # signed: buy costs, sell adds
+        self.cash -= event.quantity * event.fill_price   # short (neg qty) ADDS cash
         self.cash -= event.commission
 
     def mark_to_market(self, data):
-        """Snapshot total account value (cash + shares valued at today's price)."""
         total = self.cash
         for symbol, qty in self.positions.items():
             price = data.current_price(symbol)
