@@ -20,6 +20,12 @@ including the part most backtests skip: testing honestly and reporting that the
 edge isn't real. Consistent with market efficiency, the textbook pairs are too
 efficiently arbitraged to yield an edge at daily frequency after costs.
 
+## Performance
+
+![Performance](assets/performance.png)
+
+*Top: in-sample vs. out-of-sample equity, base and Kelly sizing, with all parameters frozen at the train/test split (dashed line). The edge visible before the split does not survive after it. Bottom: the spread z-score with entry (±2) and exit (±0.5) bands.*
+
 ## Why this project
 
 I study data science with a math minor; I don't take finance courses. Building
