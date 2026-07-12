@@ -119,11 +119,11 @@ specific broker's schedule. The universe is small and US-large-cap focused.
     python -m venv venv && source venv/bin/activate
     pip install -r requirements.txt
 
-    python -m scripts.download_data          # fetch + cache data
-    python -m scripts.analyze_cointegration  # which pairs are tradeable?
-    python -m scripts.screen_edge            # gross vs net edge per pair
-    python -m scripts.out_of_sample          # the reckoning (in- vs out-of-sample)
-    python -m scripts.robustness             # parameter robustness grid
+    python -m scripts.download_data
+    python -m scripts.analyze_cointegration
+    python -m scripts.screen_edge
+    python -m scripts.out_of_sample
+    python -m scripts.robustness
 
 ## Tech stack
 
