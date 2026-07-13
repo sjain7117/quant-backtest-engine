@@ -46,3 +46,43 @@ class PairDataHandler:
     def current_price(self, symbol):
         latest = self.get_latest(symbol, 1)
         return latest[-1] if latest else None
+
+
+class MultiDataHandler:
+    """Feeds bars for an ARBITRARY set of symbols (generalizes PairDataHandler).
+
+    Same no-lookahead cursor guarantee: get_latest only ever returns data up to
+    and including 'today'. Used by portfolio-level strategies like cross-sectional
+    momentum that rank many assets at once.
+    """
+    def __init__(self, symbols, start="2015-01-01", end=None, prices=None):
+        if prices is not None:
+            self.prices = prices[list(symbols)].dropna()
+        else:
+            from data.loader import download_prices
+            self.prices = download_prices(list(symbols), start=start, end=end).dropna()
+        self.symbols = list(symbols)
+        self._cursor = -1
+        self.finished = False
+
+    def update_bars(self, events):
+        self._cursor += 1
+        if self._cursor >= len(self.prices):
+            self.finished = True
+            return
+        events.append(MarketEvent(timestamp=self.prices.index[self._cursor]))
+
+    def get_latest(self, symbol, n=1):
+        if self._cursor < 0:
+            return []
+        start = max(0, self._cursor - n + 1)
+        return self.prices[symbol].iloc[start:self._cursor + 1].tolist()
+
+    def current_timestamp(self):
+        if self._cursor < 0:
+            return None
+        return self.prices.index[self._cursor]
+
+    def current_price(self, symbol):
+        latest = self.get_latest(symbol, 1)
+        return latest[-1] if latest else None
