@@ -1,169 +1,168 @@
-# Pairs Trading Backtester — A Statistical Arbitrage Study
+# Backtesting Engine & Strategy Study: Mean-Reversion vs. Momentum
 
-An event-driven backtesting engine built from scratch, used to test a
-statistical-arbitrage (pairs trading) strategy with full rigor: no lookahead,
-realistic transaction costs, out-of-sample validation, and honest reporting.
-
-## Headline result
-
-**The strategy has no tradeable edge — and that is the finding.**
-
-The most coherent candidate pair (Coca-Cola / PepsiCo) showed a marginal
-*in-sample* edge (Sharpe 0.20) that **collapsed to negative out-of-sample**
-(Sharpe −0.50) on data the strategy never saw. Kelly position sizing, trusting
-the flawed in-sample estimate, *amplified* the out-of-sample loss (−1.29% → −3.62%,
-drawdown −2.01% → −5.83%). A robustness sweep confirmed the null across every
-reasonable parameter setting.
-
-This project demonstrates the full quantitative process working correctly,
-including the part most backtests skip: testing honestly and reporting that the
-edge isn't real. Consistent with market efficiency, the textbook pairs are too
-efficiently arbitraged to yield an edge at daily frequency after costs.
-
-## Performance
+An event-driven backtesting engine built from scratch, used to run a controlled
+comparison of the two great opposing strategy archetypes — **mean-reversion**
+(pairs trading) and **momentum** (trend-following) — under identical, rigorous
+conditions: no lookahead, realistic costs, strict out-of-sample validation, and
+honest reporting.
 
 ![Performance](assets/performance.png)
 
-*Top: in-sample vs. out-of-sample equity, base and Kelly sizing, with all parameters frozen at the train/test split (dashed line). The edge visible before the split does not survive after it. Bottom: the spread z-score with entry (±2) and exit (±0.5) bands.*
+*Both strategies over the full period, indexed to $100, with parameters frozen at
+the train/test split (dashed line). Pairs (top) shows a faint edge before the
+split that inverts after; momentum (bottom) is flat before and positive after —
+mirror images.*
+
+## Headline result
+
+**Neither strategy had a durable edge — performance was regime-dependent.**
+
+| Strategy | In-sample Sharpe (2015-21) | Out-of-sample Sharpe (2022+) |
+|---|---:|---:|
+| Pairs (mean-reversion) | +0.20 | **-0.50** |
+| Momentum (trend) | +0.08 | **+0.39** |
+
+The two strategies were near mirror images. The pairs trade had a faint in-sample
+edge that **inverted** out-of-sample; momentum did nothing in-sample but turned
+**positive** out-of-sample (a result robust across every parameter setting, though
+confined to the single 2022+ window). The calmer 2015-21 regime leaned
+reversion-friendly; the higher-dispersion 2022+ regime (rate shock, energy run)
+leaned trend-friendly. A strategy that worked in one period failed in the other.
+
+This project demonstrates the full quantitative process working correctly —
+including the parts most backtests skip: testing honestly, distrusting your own
+good-looking numbers, and reporting that the edges aren't durable.
 
 ## Why this project
 
-I study data science with a math minor; I don't take finance courses. Building
+I study data science with a math minor and don't take finance courses. Building
 this was how I learned the practical machinery of quant finance — risk, edge
-estimation, and position sizing — extending a poker bot I wrote earlier (the
-same core idea: find an edge, estimate it, size the bet accordingly).
+estimation, and position sizing — extending a poker bot I wrote earlier (same core
+idea: find an edge, estimate it, size the bet accordingly).
 
-## What it does
+## The engine (what makes it trustworthy)
 
-- Downloads and cleans adjusted daily price data (dividends/splits handled), cached locally.
-- Runs an **event-driven backtest** whose architecture makes lookahead bias
-  structurally impossible.
-- Models realistic execution: commission, slippage, and **next-bar fills**.
-- Screens pairs for tradeability with **cointegration** tests (Engle-Granger + ADF).
-- Trades a mean-reverting spread via **rolling z-score** signals.
-- Sizes positions with the **Kelly criterion** (fractional, capped).
-- Validates strictly **out-of-sample** with a **robustness** sweep.
-
-## Engine architecture
-
-The backtest is event-driven: it walks through time one bar at a time and passes
-events down a strict one-way chain:
+The backtest is **event-driven**: it walks through time one bar at a time and
+passes events down a strict one-way chain:
 
     MarketEvent -> SignalEvent -> OrderEvent -> FillEvent
 
 Information only ever flows forward. The data handler exposes prices through a
-cursor that slices history at "today," so a strategy **cannot** read future
-prices even by mistake. This is the core design principle — the difference
-between a backtest you *hope* doesn't cheat and one that *can't*.
+**cursor** that slices history at "today," so a strategy **cannot** read future
+prices even by mistake — the difference between a backtest you *hope* is honest
+and one that *can't* cheat.
 
-Realism layers on top: orders decided on day *t* fill at day *t+1*'s price
-(next-bar execution, avoiding the "trade at the price you just saw" bias), with
-commission (per-share, $1 min) and slippage (5 bps, always adverse).
+Key features:
+- **Structural no-lookahead** — enforced in code, not by convention.
+- **Next-bar execution** — orders decided on today's close fill at tomorrow's
+  price, removing the "trade at the price you just saw" bias.
+- **Realistic costs** — per-share commission ($1 min) and adverse slippage (5 bps).
+- **Signed-quantity accounting** — shorting requires no special-case logic.
+- **Strategy-agnostic** — the same engine runs a two-asset pairs trade and a
+  ten-asset momentum portfolio without modification.
+- **Honest performance module** — Sharpe, Sortino, drawdown, and time-underwater,
+  not the misleading headline total return.
+
+## The two strategies
+
+**Pairs trading (mean-reversion).** Trade the spread between two cointegrated
+assets. When the spread stretches unusually far (a rolling z-score beyond ±2),
+bet it reverts — short the rich leg, long the cheap leg — and close when it
+returns to normal. Positions sized with the Kelly criterion. Bets that gaps
+*revert*.
+
+**Cross-sectional momentum (trend).** Each month, rank the whole universe by
+trailing return and go long the top 3, short the bottom 3, dollar-neutral. Bets
+that trends *continue*. Rebalancing is calendar-anchored (first trading day of
+each month) so results don't depend on where the data slice starts.
 
 ## Methodology
 
-1. **Data** — 10 tickers, 2015–present, adjusted daily closes. Train/test split
-   at 2021-12-31; 2022+ held out and never used for fitting.
-2. **Pair selection** — cointegration screen on the training window. Of five
-   economically-motivated pairs, only V/MA (p=0.007) and KO/PEP (p=0.024) were
-   cointegrated. The famous EWA/EWC textbook pair failed (p=0.23).
-3. **Edge screen** — a cointegrated pair is necessary but *not sufficient*. V/MA,
-   the cleanest cointegration, had essentially zero gross edge (Sharpe 0.05) —
-   it is too efficiently arbitraged. KO/PEP was the only pair both cointegrated
-   and net-positive in-sample, so it was carried forward.
-4. **Signal** — spread = KO − 0.289·PEP (static hedge ratio from training).
-   Rolling z-score; enter at |z|>2, exit at |z|<0.5, stop at |z|>3.5.
-5. **Sizing** — continuous Kelly f* = μ/σ², half-Kelly, capped at 3x leverage.
-6. **Validation** — freeze all parameters from training; run on unseen 2022+ data.
+1. **Data** — 10 tickers, 2015-present, adjusted daily closes, cached locally.
+   Train/test split at 2021-12-31; 2022+ held out and never used for fitting.
+2. **Pair selection** — cointegration screen (Engle-Granger + ADF). Only V/MA
+   (p=0.007) and KO/PEP (p=0.024) were cointegrated; the textbook EWA/EWC pair
+   failed (p=0.23).
+3. **Edge screen** — cointegration is necessary but not sufficient. V/MA, the
+   cleanest cointegration, had essentially zero gross edge (Sharpe 0.05) — too
+   efficiently arbitraged. KO/PEP was the only pair both cointegrated and
+   net-positive in-sample, chosen on principle (not by data-mining many pairs).
+4. **Sizing** — pairs use continuous Kelly (f* = mu/sigma^2), half-Kelly, capped
+   at 3x. Momentum uses no fitted parameter, so nothing can leak from training.
+5. **Validation** — freeze everything from training; run on unseen 2022+ data,
+   then a robustness grid.
 
-## Results (KO/PEP)
+## Results
 
-|                  | Return | Sharpe | Max DD |
-|------------------|-------:|-------:|-------:|
-| In-sample base   |  0.49% |   0.20 | −0.65% |
-| In-sample Kelly  |  1.82% |   0.26 | −1.93% |
-| Out-sample base  | −1.29% |  −0.50 | −2.01% |
-| Out-sample Kelly | −3.62% |  −0.46 | −5.83% |
+**Pairs (KO/PEP)** — a marginal in-sample edge that collapsed out-of-sample, with
+Kelly amplifying the damage (it trusted a flawed estimate and levered to the cap):
 
-The in-sample edge was marginal and did not survive out-of-sample. A parameter
-robustness grid (lookback × entry threshold) was flat-to-negative in 14 of 16
-cells out-of-sample; the two positive cells were isolated, at the sparsest-
-trading corner — textbook multiple-testing noise, not a real edge.
+| | Return | Sharpe | Max DD |
+|---|---:|---:|---:|
+| In-sample, base | +0.49% | +0.20 | -0.65% |
+| In-sample, Kelly | +1.82% | +0.26 | -1.93% |
+| Out-of-sample, base | -1.29% | -0.50 | -2.01% |
+| Out-of-sample, Kelly | -3.62% | -0.46 | -5.83% |
+
+**Momentum** — flat in-sample, positive out-of-sample, robust across every
+lookback and breadth in a parameter grid (strongest at the classic 12-month
+lookback, Sharpe up to 0.70), but confined to the 2022+ regime:
+
+| | Return | Sharpe | Max DD |
+|---|---:|---:|---:|
+| In-sample 2015-21 | +1.67% | +0.08 | -19.71% |
+| Out-of-sample 2022+ | +15.93% | +0.39 | -15.97% |
+
+Compare on Sharpe (scale-invariant); raw returns differ because the pairs book is
+deliberately small while momentum runs a full dollar-neutral book.
 
 ## Key lessons demonstrated
 
-- **Cointegration ≠ tradeable edge.** V/MA was the most cointegrated pair and had
-  the *least* edge — the cleaner and more obvious the relationship, the more
-  thoroughly it's already arbitraged away.
-- **The highest Sharpe can be a trap.** EWA/EWC had the best gross Sharpe (0.54)
-  but wasn't cointegrated — a spurious pattern the statistical filter correctly
-  rejected.
-- **In-sample results lie.** A +0.20 in-sample Sharpe became −0.50 out-of-sample.
+- **Regime dependence.** Neither archetype held an edge across both periods —
+  reversion worked then failed, momentum failed then worked. Strategy performance
+  was a property of the regime, not the strategy alone.
+- **Cointegration != tradeable edge.** The most cointegrated pair (V/MA) had the
+  least edge — the cleaner the relationship, the more thoroughly it's arbitraged.
+- **The highest Sharpe can be a trap.** The best gross Sharpe (EWA/EWC) came from a
+  pair that wasn't cointegrated — a spurious pattern the filter rejected.
+- **In-sample results lie.** A +0.20 in-sample pairs Sharpe became -0.50 out-of-sample.
 - **Kelly amplifies mis-estimated edges.** Levering a flawed edge tripled the
-  out-of-sample loss. On low-variance strategies Kelly's leverage suggestion
-  explodes (raw f* ≈ 59 here), so the cap — not the formula — becomes the real
-  risk control.
-- **Don't data-mine.** Picking the best of many pairs manufactures spurious edges;
-  one candidate was chosen on principle and tested honestly.
-
-## Extension: mean-reversion vs. momentum
-
-To test whether the null result was specific to pairs trading or something
-broader, the same engine was used to run a second, opposite strategy:
-**cross-sectional momentum** (each month, long the universe's top-3 trailing
-performers and short the bottom 3, dollar-neutral). Momentum bets that trends
-*continue*; pairs trading bets that gaps *revert* — opposite hypotheses run
-through identical costs, the same train/test split, and the same out-of-sample
-discipline.
-
-The two strategies were near mirror images (compare on Sharpe, which is
-scale-invariant; raw returns differ because the pairs book is deliberately small):
-
-| Strategy | In-sample Sharpe (2015-21) | Out-of-sample Sharpe (2022+) |
-|---|---:|---:|
-| Pairs (mean-reversion) | +0.20 | -0.50 |
-| Momentum (trend) | +0.08 | +0.39 |
-
-Pairs had a faint in-sample edge that inverted out-of-sample; momentum did nothing
-in-sample but turned positive out-of-sample (a result robust across every
-lookback/breadth in a parameter grid, though confined to the single 2022+ window).
-
-**The finding is regime dependence, not a winner.** Neither archetype held an edge
-across both periods: the calmer 2015-21 regime was kinder to reversion, the
-higher-dispersion 2022+ regime (rate shock, energy run) kinder to trend. A strategy
-that worked in one failed in the other.
-
-*Process note:* an early momentum result (Sharpe 0.52) turned out to depend on the
-rebalance *timing* — an artifact of counting rebalance days from the data slice's
-start. Switching to calendar-anchored monthly rebalancing removed it and dropped
-the figure to a stable 0.39. Finding and fixing that sensitivity is part of why the
-final numbers can be trusted.
+  out-of-sample loss; on low-variance strategies the raw f* explodes, so the cap
+  (not the formula) is the real risk control.
+- **Distrust your own good numbers.** An early momentum Sharpe of 0.52 turned out
+  to depend on rebalance *timing* — an artifact of counting rebalance days from the
+  data slice's start. Calendar-anchored rebalancing removed it and dropped the
+  figure to a stable 0.39. Finding and fixing that is why the numbers can be trusted.
 
 ## Limitations
 
 Daily close data only; no intraday or order-book dynamics. Short-borrow fees and
-margin are not modeled. Cost assumptions are conservative estimates, not a
-specific broker's schedule. The universe is small and US-large-cap focused.
+margin are not modeled. Cost assumptions are conservative estimates, not a specific
+broker's schedule. The universe is small and US-large-cap focused, and the
+out-of-sample window is a single ~4.5-year regime.
 
 ## Project structure
 
-    data/         data download, cleaning, caching
-    engine/       event classes, data handler, portfolio, execution, backtest loop
-    strategies/   buy-and-hold, MA crossover (engine tests), pairs trading
+    data/         download, cleaning, caching
+    engine/       events, data handlers (pair + multi-asset), portfolio, execution, loop
+    strategies/   buy-and-hold, MA crossover (engine tests), pairs trading, momentum
     analysis/     cointegration, performance metrics, Kelly sizing
-    scripts/      runnable analyses (screening, diagnostics, out-of-sample, robustness)
+    scripts/      screening, diagnostics, out-of-sample, robustness, comparison, charts
 
 ## Running it
 
     python -m venv venv && source venv/bin/activate
     pip install -r requirements.txt
 
-    python -m scripts.download_data
-    python -m scripts.analyze_cointegration
-    python -m scripts.screen_edge
-    python -m scripts.out_of_sample
-    python -m scripts.robustness
+    python -m scripts.download_data           # fetch + cache data
+    python -m scripts.analyze_cointegration   # which pairs are tradeable?
+    python -m scripts.out_of_sample           # pairs: the reckoning
+    python -m scripts.run_momentum            # momentum: in- vs out-of-sample
+    python -m scripts.compare_strategies      # head-to-head comparison
+    python -m scripts.momentum_robustness     # momentum parameter grid
+    python -m scripts.make_charts             # regenerate the chart
 
 ## Tech stack
 
-Python, pandas, NumPy, statsmodels (cointegration/ADF/OLS), yfinance, pyarrow.
+Python, pandas, NumPy, statsmodels (cointegration / ADF / OLS), yfinance,
+matplotlib, pyarrow.
