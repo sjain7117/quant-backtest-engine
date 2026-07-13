@@ -106,6 +106,39 @@ trading corner — textbook multiple-testing noise, not a real edge.
 - **Don't data-mine.** Picking the best of many pairs manufactures spurious edges;
   one candidate was chosen on principle and tested honestly.
 
+## Extension: mean-reversion vs. momentum
+
+To test whether the null result was specific to pairs trading or something
+broader, the same engine was used to run a second, opposite strategy:
+**cross-sectional momentum** (each month, long the universe's top-3 trailing
+performers and short the bottom 3, dollar-neutral). Momentum bets that trends
+*continue*; pairs trading bets that gaps *revert* — opposite hypotheses run
+through identical costs, the same train/test split, and the same out-of-sample
+discipline.
+
+The two strategies were near mirror images (compare on Sharpe, which is
+scale-invariant; raw returns differ because the pairs book is deliberately small):
+
+| Strategy | In-sample Sharpe (2015-21) | Out-of-sample Sharpe (2022+) |
+|---|---:|---:|
+| Pairs (mean-reversion) | +0.20 | -0.50 |
+| Momentum (trend) | +0.08 | +0.39 |
+
+Pairs had a faint in-sample edge that inverted out-of-sample; momentum did nothing
+in-sample but turned positive out-of-sample (a result robust across every
+lookback/breadth in a parameter grid, though confined to the single 2022+ window).
+
+**The finding is regime dependence, not a winner.** Neither archetype held an edge
+across both periods: the calmer 2015-21 regime was kinder to reversion, the
+higher-dispersion 2022+ regime (rate shock, energy run) kinder to trend. A strategy
+that worked in one failed in the other.
+
+*Process note:* an early momentum result (Sharpe 0.52) turned out to depend on the
+rebalance *timing* — an artifact of counting rebalance days from the data slice's
+start. Switching to calendar-anchored monthly rebalancing removed it and dropped
+the figure to a stable 0.39. Finding and fixing that sensitivity is part of why the
+final numbers can be trusted.
+
 ## Limitations
 
 Daily close data only; no intraday or order-book dynamics. Short-borrow fees and
