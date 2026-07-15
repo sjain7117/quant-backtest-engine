@@ -134,6 +134,27 @@ deliberately small while momentum runs a full dollar-neutral book.
   data slice's start. Calendar-anchored rebalancing removed it and dropped the
   figure to a stable 0.39. Finding and fixing that is why the numbers can be trusted.
 
+## Conclusion
+
+The project set out to test, honestly, whether two classic quantitative strategies
+have a real tradeable edge -- and to build an engine rigorous enough to trust the
+answer. The answer: **neither mean-reversion (pairs trading) nor momentum had a
+durable edge on this universe.** Performance was regime-dependent -- the pairs edge
+existed in 2015-21 and inverted in 2022+, while momentum did the opposite. Neither
+survived as a persistent, cross-regime source of return.
+
+This is the outcome market efficiency predicts. Well-known strategies applied to
+liquid, heavily-watched assets are arbitraged until little reliable edge remains, so
+what's left is fragile and specific to a market regime rather than durable.
+
+The deeper conclusion is methodological. The value of this work is not a profitable
+strategy but a system and a process that can tell a real edge from an artifact:
+structural no-lookahead, realistic costs, strictly out-of-sample validation,
+robustness grids, and honest reporting -- including catching and fixing a
+rebalance-timing artifact that had inflated an early momentum result. A rigorously
+established null is a more credible and more useful result than a backtest that looks
+too good to be true.
+
 ## Limitations
 
 Daily close data only; no intraday or order-book dynamics. Short-borrow fees and
