@@ -1,0 +1,53 @@
+"""Phase 4 sleeves — run each strategy standalone and return its daily returns.
+
+Each sleeve reuses the EXACT engine wiring from your out-of-sample script, so the
+returns match backtests you already trust. Honest params: the pairs hedge ratio
+(beta) is fit ONLY on pre-2022 data; momentum's lookback/skip are fixed
+hyperparameters that never touch the data.
+"""
+import pandas as pd
+from data.loader import download_prices, CANDIDATE_UNIVERSE
+from analysis.cointegration import hedge_ratio
+from analysis.performance import equity_curve_to_series
+from engine.data_handler import PairDataHandler, MultiDataHandler
+from engine.portfolio import Portfolio
+from engine.execution import SimulatedExecution, PerShareCommission, BpsSlippage
+from engine.backtest import Backtest
+from strategies.pairs_trading import PairsTradingStrategy
+from strategies.momentum import CrossSectionalMomentum
+
+CAPITAL = 100_000
+
+
+def _exec():
+    return SimulatedExecution(PerShareCommission(0.005, 1.0), BpsSlippage(5.0))
+
+
+def _run_to_returns(data, strat):
+    port = Portfolio(data, initial_capital=CAPITAL)
+    Backtest(data, strat, port, _exec()).run()
+    eq = equity_curve_to_series(port.equity_curve)
+    return eq.pct_change().dropna()
+
+
+def pairs_returns(sym_a="KO", sym_b="PEP", train_end="2021-12-31", base_units=100):
+    """Daily returns of the pairs sleeve; beta frozen from the pre-2022 train slice."""
+    prices = download_prices([sym_a, sym_b], start="2015-01-01").dropna()
+    beta, _, _ = hedge_ratio(prices.loc[:train_end, sym_a], prices.loc[:train_end, sym_b])
+    data = PairDataHandler(sym_a, sym_b, prices=prices)
+    strat = PairsTradingStrategy(sym_a, sym_b, beta=beta, lookback=30,
+                                 entry_z=2.0, exit_z=0.5, stop_z=3.5, base_units=base_units)
+    r = _run_to_returns(data, strat); r.name = "pairs"
+    return r, beta
+
+
+def momentum_returns(symbols=None, lookback=126, skip=21, n_long=3, n_short=3,
+                     gross_per_side=50_000):
+    """Daily returns of the cross-sectional momentum sleeve over the full universe."""
+    symbols = symbols or list(CANDIDATE_UNIVERSE)
+    prices = download_prices(symbols, start="2015-01-01").dropna()
+    data = MultiDataHandler(symbols, prices=prices)
+    strat = CrossSectionalMomentum(symbols, lookback=lookback, skip=skip,
+                                   n_long=n_long, n_short=n_short, gross_per_side=gross_per_side)
+    r = _run_to_returns(data, strat); r.name = "momentum"
+    return r
