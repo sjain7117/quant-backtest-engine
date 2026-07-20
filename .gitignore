@@ -4,3 +4,5 @@ __pycache__/
 data/cache/
 .DS_Store
 regime/*.png
+regime/*.png
+regime/online_p.parquet
