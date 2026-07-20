@@ -187,3 +187,50 @@ out-of-sample window is a single ~4.5-year regime.
 
 Python, pandas, NumPy, statsmodels (cointegration / ADF / OLS), yfinance,
 matplotlib, pyarrow.
+
+## Regime-Switching Overlay (extension)
+
+**TL;DR — an honest, no-lookahead regime detector could not beat a fixed 50/50 blend of the two strategies. Regime-dependence is real, but was not exploitable in real time.**
+
+### Motivation
+The core project found the two strategies' edges were regime-dependent: pairs (mean-reversion) worked in the calm 2015–21 market, momentum (trend) worked in the turbulent 2022+ market. This extension asks the obvious follow-up — can the regime be detected in real time and used to switch to the right strategy? — and answers it under the same no-lookahead discipline as the engine itself.
+
+### Method
+A regime detector feeds a capital-allocation overlay that sits on top of the existing per-strategy backtests (each strategy is a "sleeve"):
+
+1. **Features** (regime/features.py) — trailing realized volatility, cross-sectional dispersion, return autocorrelation, and trend, all past-only.
+2. **Rule baseline** (regime/detector_rule.py) — a transparent volatility-hysteresis label (calm/turbulent); the honest baseline the model has to beat.
+3. **In-sample HMM** (regime/detector_hmm.py) — a two-state Gaussian Hidden Markov Model fit on the whole history. It independently recovered the thesis: the calm state is low-vol and mean-reverting, the turbulent state is high-vol and trending.
+4. **Online HMM** (regime/detector_online.py) — the same model made strictly past-only: monthly walk-forward refits, expanding-window standardization, filtered (last-observation) probabilities. Verified lookahead-free by an append-the-future test (a past estimate is byte-identical whether or not future data exists).
+5. **Overlay** (regime/overlay.py) — a soft blend (momentum weight = P(turbulent), pairs weight = 1 − P), a cash overlay for extreme turbulence, a one-day signal lag, and a turnover cost. Sleeves are vol-targeted to 10% (leverage capped at 10×); the pairs sleeve is a five-pair basket for robustness.
+
+### Results
+Four books, in-sample (2017–2021, post burn-in) vs out-of-sample (2022+):
+
+| book | IS Sharpe | IS maxDD | OOS Sharpe | OOS maxDD |
+|---|---|---|---|---|
+| pairs_only | −0.14 | −9.3% | 0.06 | −13.0% |
+| momentum_only | 0.31 | −18.1% | 0.39 | −14.8% |
+| static_5050 | 0.23 | −9.9% | **0.36** | **−8.5%** |
+| regime_blend | −0.24 | −7.8% | −0.33 | −17.2% |
+
+- **The regime overlay is the worst book in every period.** A fixed equal-risk 50/50 blend beats it in-sample (0.23 vs −0.24) and out-of-sample (0.36 vs −0.33). Static wins by capturing diversification; the overlay throws that away by concentrating into one sleeve at poorly-timed moments and paying ~1%/yr in turnover.
+- **Honesty mattered more than sophistication.** Removing lookahead changed ~28% of the regime labels (online vs in-sample agreement 72%), whereas switching from a one-line rule to the HMM changed only ~16%. The peek was doing more work than the model.
+- **An adaptive detector's yardstick is set by what it has lived through.** The honest detector saw 2022+ as less turbulent than 2015–21 (20% vs 36% turbulent days), because the 2020 COVID spike recalibrated its sense of "normal." It therefore under-allocated to momentum exactly when momentum was the only thing paying.
+- **The cash safety-valve was miscalibrated by the same lag** — regime_blend has the deepest OOS drawdown despite the de-risk overlay.
+
+### Conclusion
+Regime-dependence is real but was **not exploitable in real time** with this approach. The regime is legible mainly in hindsight; an honest detector lags, and timing between two strategies underperformed simply diversifying across them. It is a negative result, and the no-lookahead rigor is what makes it credible rather than a fixable backtest error.
+
+### Limitations & next steps
+- One detector configuration (two states, three features, monthly refit) on one universe.
+- The blend is capital/vol-weighted, not risk-parity across time-varying correlations.
+- Worth trying: a three-state detector (calm / normal / crisis), conditioning on a macro variable (rates or the yield-curve slope), or a longer burn-in.
+
+### Run it
+
+    python -m scripts.plot_regime_features     # Phase 0: features
+    python -m scripts.plot_regime_labels       # Phase 1: rule baseline
+    python -m scripts.plot_regime_hmm          # Phase 2: in-sample HMM
+    python -m scripts.plot_regime_online       # Phase 3: online (no-lookahead) HMM
+    python -m scripts.regime_overlay           # Phase 4/5: the verdict
