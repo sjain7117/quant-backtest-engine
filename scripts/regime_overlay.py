@@ -1,31 +1,24 @@
-"""Phase 4 — regime overlay: four-book comparison, in-sample vs 2022+.
+"""Phase 4/5 — regime overlay: four-book comparison, in-sample vs 2022+.
 
 Run:   python -m scripts.regime_overlay
 Saves: regime/regime_overlay.png  (+ caches the online probability to parquet)
 
-Sleeves are VOL-TARGETED to a common 10% annual vol, with the scaling constant
-frozen from the pre-2022 train period (honest), so the blend is a fair risk-
-balanced contest rather than being dominated by the higher-vol strategy.
-
-Books:
-  pairs_only, momentum_only  -- the standalone (vol-targeted) sleeves
-  static_5050                -- HONEST baseline: equal RISK weight, NO regime info
-  regime_blend               -- detector-driven soft blend + cash overlay
-
-The question: does regime_blend beat static_5050 OUT-OF-SAMPLE (2022+)?
+Robustness build: pairs sleeve is a 5-pair BASKET, and vol-target leverage is
+CAPPED at 10x, so the verdict can't rest on one fragile pair levered to the moon.
 """
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from regime.sleeves import pairs_returns, momentum_returns
+from regime.sleeves import pairs_basket_returns, momentum_returns
 from regime.features import build_feature_frame
 from regime.detector_online import online_regimes
 from regime.overlay import four_books, to_equity
 from analysis.performance import compute_metrics
 
 SPLIT = pd.Timestamp("2022-01-01")
-VOL_TARGET = 0.10                      # 10% annualized vol per sleeve
+VOL_TARGET = 0.10       # 10% annualized vol per sleeve
+MAX_LEV = 10.0          # cap leverage so no fragile sleeve gets levered 29x
 BASE = Path(__file__).resolve().parent.parent / "regime"
 OUT = BASE / "regime_overlay.png"
 P_CACHE = BASE / "online_p.parquet"
@@ -40,11 +33,11 @@ def _online_p():
     return p
 
 
-def _vol_scalar(returns, target=VOL_TARGET):
-    """Fixed leverage to hit `target` annual vol, measured on PRE-2022 data only."""
+def _vol_scalar(returns, target=VOL_TARGET, max_lev=MAX_LEV):
+    """Leverage to hit `target` annual vol (from PRE-2022 data), capped at max_lev."""
     train = returns[returns.index < SPLIT]
     v = train.std() * (252 ** 0.5)
-    return target / v if v > 0 else 1.0
+    return min(target / v, max_lev) if v > 0 else 1.0
 
 
 def _metrics(returns):
@@ -52,13 +45,13 @@ def _metrics(returns):
 
 
 def main():
-    pairs, beta = pairs_returns()
+    pairs, betas = pairs_basket_returns()
     mom = momentum_returns()
-    print(f"pairs beta (train) = {beta:.4f}")
+    print(f"pair betas (train): {betas}")
 
     sp, sm = _vol_scalar(pairs), _vol_scalar(mom)
-    print(f"vol-target leverage (from pre-2022): pairs x{sp:.1f}, momentum x{sm:.1f}")
-    pairs, mom = pairs * sp, mom * sm    # risk-balanced sleeves
+    print(f"vol-target leverage (capped at {MAX_LEV:.0f}x): pairs x{sp:.1f}, momentum x{sm:.1f}")
+    pairs, mom = pairs * sp, mom * sm
 
     p = _online_p()
     books, w, turnover = four_books(pairs, mom, p)
@@ -81,7 +74,7 @@ def main():
         eq = to_equity(r)
         ax.plot(eq.index, eq.values, linewidth=1.1, label=name)
     ax.axvline(SPLIT, color="black", linestyle=":", linewidth=1)
-    ax.set_title("Regime overlay vs baselines  (dotted = in-sample | 2022+)")
+    ax.set_title("Regime overlay vs baselines  (5-pair basket, capped lev)  dotted = IS | 2022+")
     ax.set_ylabel("Equity ($100k start)"); ax.set_xlabel("Date")
     ax.legend(fontsize=8); ax.margins(x=0)
     fig.tight_layout(); BASE.mkdir(parents=True, exist_ok=True)
