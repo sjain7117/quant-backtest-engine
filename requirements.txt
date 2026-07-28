@@ -37,3 +37,4 @@ urllib3==2.7.0
 websockets==16.0
 yfinance==1.5.1
 hmmlearn
+pytest
