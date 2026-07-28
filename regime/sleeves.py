@@ -42,13 +42,6 @@ def _single_pair_returns(sym_a, sym_b, train_end="2021-12-31", base_units=100):
     return _run_to_returns(data, strat), beta
 
 
-def pairs_returns(sym_a="KO", sym_b="PEP", train_end="2021-12-31", base_units=100):
-    """Single-pair sleeve (kept for reference / the original run)."""
-    r, beta = _single_pair_returns(sym_a, sym_b, train_end, base_units)
-    r.name = "pairs"
-    return r, beta
-
-
 def pairs_basket_returns(pairs=None, train_end="2021-12-31", base_units=100):
     """Equal-weight basket of several pairs -> a robust pairs sleeve.
 
