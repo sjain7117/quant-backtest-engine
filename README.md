@@ -1,5 +1,8 @@
 # Backtesting Engine & Strategy Study: Mean-Reversion vs. Momentum
 
+<!-- negative-result -->
+> **Headline result — read this first:** regime timing *underperformed* a static 50/50 blend of the two sleeves. This repo leads with that negative result on purpose. The value here is the methodology — leak-free walk-forward evaluation, HMM regime detection, and honest accounting — not a claimed edge. Evidence and metrics are below.
+
 An event-driven backtesting engine built from scratch, used to run a controlled
 comparison of the two great opposing strategy archetypes — **mean-reversion**
 (pairs trading) and **momentum** (trend-following) — under identical, rigorous
@@ -156,6 +159,7 @@ established null is a more credible and more useful result than a backtest that 
 too good to be true.
 
 ## Limitations
+- **Survivorship bias:** the universe is a hand-picked set of tickers that survived to today. There is no point-in-time index membership and no delisted names, so results are optimistic — the strategies never had to trade a company that later went to zero or was removed.
 
 Daily close data only; no intraday or order-book dynamics. Short-borrow fees and
 margin are not modeled. Cost assumptions are conservative estimates, not a specific
