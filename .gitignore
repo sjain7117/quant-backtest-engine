@@ -6,3 +6,6 @@ data/cache/
 regime/*.png
 regime/*.png
 regime/online_p.parquet
+
+# keep committed performance charts under assets/
+!assets/*.png
